@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 type ApiNode = {
   id: string;
   type: string;
-  name: string;
+  label: string;
   properties: Record<string, string | number | boolean | null>;
 };
 
@@ -44,7 +44,7 @@ export default function GraphExplorer() {
       {
         selector: "node",
         style: {
-          label: "data(name)",
+          label: "data(label)",
           "font-size": 9,
           color: "#e2e8f0",
           "background-color": "data(color)",
@@ -80,7 +80,7 @@ export default function GraphExplorer() {
       group: "nodes",
       data: {
         id: n.id,
-        name: `${n.name} [${n.type}]`,
+        label: `${n.label} [${n.type}]`,
         type: n.type,
         raw: n.properties,
         color: colorByType[n.type] ?? "#94a3b8"
@@ -174,7 +174,7 @@ export default function GraphExplorer() {
         .slice(0, 4)
         .map(([k, v]) => `${k}: ${v}`)
         .join(" | ");
-      setStatus(`${node.data("name")} :: ${rawText}`);
+      setStatus(`${node.data("label")} :: ${rawText}`);
     });
 
     cy.on("mouseover", "edge", (evt) => {

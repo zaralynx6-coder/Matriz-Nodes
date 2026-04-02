@@ -1,10 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
 import cytoscape from 'cytoscape';
-
-type GraphNode = { id: string; type: string; label: string; properties: Record<string, unknown> };
-type GraphEdge = { id: string; type: string; source: string; target: string };
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { expandEntityGraph, getMockGraph, getSeedGraph, MockEdge, MockNode } from '@/lib/mockGraph';
 
 const colorByType: Record<string, string> = {
   Pessoa: '#60a5fa',
@@ -14,51 +12,74 @@ const colorByType: Record<string, string> = {
   Produto: '#a78bfa',
   Fatura: '#22c55e',
   Projeto: '#f97316',
-  Documento: '#eab308'
+  Documento: '#eab308',
 };
 
 export default function GraphViewer() {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [entityId, setEntityId] = useState('');
+  const fullGraph = useMemo(() => getMockGraph(), []);
+  const [entityId, setEntityId] = useState('pessoa_3381');
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('ALL');
-  const [graph, setGraph] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] }>({ nodes: [], edges: [] });
+  const [status, setStatus] = useState('Gerando mock local...');
+  const [graph, setGraph] = useState<{ nodes: MockNode[]; edges: MockEdge[] }>(() => getSeedGraph(320));
 
   const filteredNodes = useMemo(
     () =>
       graph.nodes.filter(
-        (n) => (filterType === 'ALL' || n.type === filterType) && n.label.toLowerCase().includes(search.toLowerCase())
+        (n) => (filterType === 'ALL' || n.type === filterType) && n.label.toLowerCase().includes(search.toLowerCase()),
       ),
-    [graph.nodes, filterType, search]
+    [graph.nodes, filterType, search],
   );
 
   useEffect(() => {
+    setStatus(
+      `Mock local ativo (sem API): ${fullGraph.nodes.length.toLocaleString('pt-BR')} nós / ${fullGraph.edges.length.toLocaleString('pt-BR')} arestas`,
+    );
+  }, [fullGraph.edges.length, fullGraph.nodes.length]);
+
+  useEffect(() => {
     if (!containerRef.current) return;
+
     const visibleIds = new Set(filteredNodes.map((n) => n.id));
-    const edges = graph.edges.filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target));
+    const visibleEdges = graph.edges.filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target));
 
     const cy = cytoscape({
       container: containerRef.current,
       elements: [
         ...filteredNodes.map((n) => ({ data: { id: n.id, label: n.label, type: n.type, tooltip: JSON.stringify(n.properties) } })),
-        ...edges.map((e) => ({ data: { id: e.id, source: e.source, target: e.target, label: e.type } }))
+        ...visibleEdges.map((e) => ({ data: { id: e.id, source: e.source, target: e.target, label: e.type } })),
       ],
       style: [
-        { selector: 'node', style: { label: 'data(label)', 'background-color': (el) => colorByType[el.data('type')] ?? '#64748b', color: '#fff', 'font-size': 8 } },
-        { selector: 'edge', style: { width: 1.3, label: 'data(label)', color: '#cbd5e1', 'font-size': 7, 'line-color': '#475569' } }
+        {
+          selector: 'node',
+          style: {
+            label: 'data(label)',
+            'background-color': (el) => colorByType[el.data('type')] ?? '#64748b',
+            color: '#fff',
+            'font-size': 8,
+            width: 10,
+            height: 10,
+          },
+        },
+        {
+          selector: 'edge',
+          style: { width: 1.1, label: 'data(label)', color: '#cbd5e1', 'font-size': 7, 'line-color': '#475569' },
+        },
       ],
-      layout: { name: 'cose', animate: false }
+      layout: { name: 'cose', animate: false, fit: true, padding: 18 },
     });
 
-    cy.on('tap', 'node', async (evt) => {
+    cy.on('tap', 'node', (evt) => {
       const id = evt.target.id();
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'}/entity/${id}`);
-      if (!response.ok) return;
-      const payload = await response.json();
+      const payload = expandEntityGraph(id, 1, 550);
+      if (!payload.nodes.length) return;
+
       setGraph((prev) => ({
-        nodes: [...prev.nodes, ...payload.nodes.filter((n: GraphNode) => !prev.nodes.some((p) => p.id === n.id))],
-        edges: [...prev.edges, ...payload.edges.filter((e: GraphEdge) => !prev.edges.some((p) => p.id === e.id))]
+        nodes: [...prev.nodes, ...payload.nodes.filter((n) => !prev.nodes.some((p) => p.id === n.id))],
+        edges: [...prev.edges, ...payload.edges.filter((e) => !prev.edges.some((p) => p.id === e.id))],
       }));
+      setStatus(`Expandido nó ${id} (+${payload.nodes.length} nós candidatos).`);
     });
 
     cy.on('mouseover', 'node', (evt) => {
@@ -71,11 +92,23 @@ export default function GraphViewer() {
     return () => cy.destroy();
   }, [filteredNodes, graph.edges]);
 
-  const loadEntity = async () => {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'}/entity/${entityId}`);
-    if (!response.ok) return;
-    const payload = await response.json();
-    setGraph(payload);
+  const loadEntity = () => {
+    if (!entityId.trim()) {
+      setStatus('Informe um ID (ex.: pessoa_3381) para expandir.');
+      return;
+    }
+
+    const payload = expandEntityGraph(entityId.trim(), 2, 700);
+    if (!payload.nodes.length) {
+      setStatus(`ID ${entityId} não encontrado no mock local.`);
+      return;
+    }
+
+    setGraph((prev) => ({
+      nodes: [...prev.nodes, ...payload.nodes.filter((n) => !prev.nodes.some((p) => p.id === n.id))],
+      edges: [...prev.edges, ...payload.edges.filter((e) => !prev.edges.some((p) => p.id === e.id))],
+    }));
+    setStatus(`Carregado/expandido ${entityId}: ${payload.nodes.length} nós e ${payload.edges.length} arestas no subgrafo.`);
   };
 
   return (
@@ -86,15 +119,23 @@ export default function GraphViewer() {
         <select className="rounded bg-slate-800 p-2" value={filterType} onChange={(e) => setFilterType(e.target.value)}>
           <option value="ALL">Todas classes</option>
           {Object.keys(colorByType).map((type) => (
-            <option key={type} value={type}>{type}</option>
+            <option key={type} value={type}>
+              {type}
+            </option>
           ))}
         </select>
-        <button className="rounded bg-sky-600 p-2" onClick={loadEntity}>Carregar / expandir</button>
+        <button className="rounded bg-sky-600 p-2" onClick={loadEntity}>
+          Carregar / expandir
+        </button>
       </div>
+      <div className="rounded border border-slate-700 p-3 text-xs">{status}</div>
       <div className="rounded border border-slate-700 p-3 text-xs">
         <strong>Legenda:</strong>{' '}
         {Object.entries(colorByType).map(([type, color]) => (
-          <span key={type} className="mr-3 inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: color }} />{type}</span>
+          <span key={type} className="mr-3 inline-flex items-center gap-1">
+            <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+            {type}
+          </span>
         ))}
       </div>
       <div ref={containerRef} className="h-[68vh] rounded border border-slate-700 bg-slate-900" />
