@@ -1,3 +1,7 @@
+import GraphExplorer from "../../components/GraphExplorer";
+
+export default function GraphPage() {
+  return <GraphExplorer />;
 import { GraphView } from '../../components/GraphView';
 
 export default function GraphPage() {

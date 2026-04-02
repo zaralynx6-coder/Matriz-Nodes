@@ -1,4 +1,12 @@
 {
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "preserve",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "incremental": true,
+    "module": "esnext",
+    "isolatedModules": true,
+    "plugins": [{ "name": "next" }]
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["dom", "dom.iterable", "es2022"],

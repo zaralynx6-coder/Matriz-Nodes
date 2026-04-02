@@ -1,99 +1,92 @@
-# Matriz Nodes
+# Matriz Nodes — Codex Data Nexus (PoC)
 
-Base de projeto com frontend + backend para exploração de grafos com ontologia mínima, geração sintética de dados e persistência em Neo4j com fallback em arquivos locais.
+Prova de conceito para visualização de grafo empresarial com **5.000+ nós** usando **Next.js + TypeScript** (frontend), **Node.js/Express** (API) e geração de dados sintéticos com **Faker**.
+
+## Stack
+
+- Frontend: Next.js, React, Tailwind, Cytoscape.js
+- Backend: Express, TypeScript
+- Dados: JSON local (`data/graph.json`) e opcionalmente Neo4j
 
 ## Estrutura
 
-- `frontend/`: Next.js + TypeScript + Tailwind + Cytoscape.js
-- `backend/`: Node.js + Express + TypeScript
-- `scripts/`: geração de dados sintéticos
-- `data/`: saída JSON/CSV gerada pelo script
+```txt
+apps/
+  api/
+  web/
+scripts/
+  generateGraph.ts
+shared/
+  types.ts
+data/
+  graph.json (gerado)
+```
 
-## Ontologia mínima
+## Pré-requisitos
 
-### Tipos de nós
-`Pessoa`, `Empresa`, `Conta`, `Transacao`, `Produto`, `Fatura`, `Projeto`, `Documento`
+- Node.js 20+
+- npm 10+
+- (Opcional) Neo4j local
 
-### Tipos de arestas
-`EMPLOYED_IN`, `OWNS_ACCOUNT`, `PAYS`, `RECEIVES`, `SUPPLIES`, `CONTAINS_ITEM`, `ISSUED_FOR`, `WORKS_ON`, `HAS_DOCUMENT`
-
-## 1) Instalação
+## Instalação
 
 ```bash
 npm install
 ```
 
-## 2) Como iniciar o Neo4j (opcional, preferencial)
-
-Exemplo com Docker:
-
-```bash
-docker run --name neo4j-matriz \
-  -p7474:7474 -p7687:7687 \
-  -e NEO4J_AUTH=neo4j/password123 \
-  -d neo4j:5
-```
-
-Variáveis necessárias para persistir no banco:
-
-```bash
-export NEO4J_URI=bolt://localhost:7687
-export NEO4J_USER=neo4j
-export NEO4J_PASSWORD=password123
-```
-
-> Se não configurar Neo4j, o sistema usa fallback em `data/graph.json`, `data/nodes.csv` e `data/edges.csv`.
-
-## 3) Gerar dados sintéticos (>= 5.000 nós)
+## Geração de dados sintéticos
 
 ```bash
 npm run generate
 ```
 
-- Script: `scripts/generateGraph.ts`
-- Usa `faker`
-- Anonimiza identificadores sensíveis via hash SHA-256 (ex.: documento, email, conta)
-- Gera milhares de nós e arestas e tenta persistir no Neo4j quando configurado
+Isso cria `data/graph.json` com no mínimo 5.000 nós e arestas relacionais.
 
-## 4) Subir backend
+### Persistência opcional em Neo4j
 
-```bash
-npm run dev:backend
-```
-
-Backend por padrão em `http://localhost:4000`.
-
-### Endpoints mínimos
-
-- `GET /entity/:id`: retorna subgrafo de 1º grau (nó + vizinhos imediatos)
-- `GET /transactions?minValue=100&maxValue=5000&startDate=2026-01-01&endDate=2026-03-31`
-
-## 5) Subir frontend
+Defina as variáveis de ambiente antes de rodar o gerador:
 
 ```bash
-npm run dev:frontend
+export NEO4J_URI=bolt://localhost:7687
+export NEO4J_USER=neo4j
+export NEO4J_PASSWORD=senha
+npm run generate
 ```
 
-Frontend em `http://localhost:3000/graph`.
-
-Variável opcional para API:
+## Executando em desenvolvimento
 
 ```bash
-export NEXT_PUBLIC_API_URL=http://localhost:4000
+npm run dev
 ```
 
-## Página `/graph`
+Serviços:
 
-- Layout force-directed com `cose` (Cytoscape.js)
-- Filtros por classe
-- Busca por label
-- Legenda por classe
-- Expansão por clique no nó (busca 1º grau no backend)
-- Destaque visual (tooltip simples via payload serializado)
+- API: `http://localhost:4000`
+- Frontend: `http://localhost:3000`
+- Visualização: `http://localhost:3000/graph`
 
-## Limites de carregamento e performance
+## Endpoints da API
 
-- Recomenda-se carregar por entidade e expandir incrementalmente por clique.
-- Evitar renderizar dezenas de milhares de elementos simultaneamente no frontend.
-- Para grandes volumes, aplicar paginação de transações e limitação de profundidade no backend.
-- No Neo4j, preferir índices em `id` e filtros temporais para reduzir custo de consulta.
+- `GET /health`
+- `GET /graph/meta`
+- `GET /graph/seed?limit=350`
+- `GET /entity/:id?depth=1`
+- `GET /transactions?minValue=&maxValue=&startDate=&endDate=&limit=`
+- `GET /search?q=`
+
+## Requisitos atendidos
+
+- [x] Ontologia com 8 tipos de nós e 9 tipos de arestas
+- [x] Script para gerar grafo com 5.000+ nós
+- [x] Renderização interativa com zoom/pan
+- [x] Filtros por tipo e valor
+- [x] Busca por nome/ID
+- [x] Expansão de conexões via clique
+- [x] Dados sintéticos e anonimização de documento
+
+## Observações de performance e governança
+
+- Carregamento inicial parcial (`/graph/seed`) para reduzir custo no navegador.
+- Expansão sob demanda por entidade (`/entity/:id`).
+- Filtro transacional via API para limitar subgrafo.
+- Documentos e identificadores sensíveis são mascarados/sintéticos.
