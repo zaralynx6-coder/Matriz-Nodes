@@ -10,6 +10,14 @@ export default function HomePage() {
       <Link href="/graph" className="rounded bg-cyan-500 px-5 py-3 font-semibold text-slate-950 hover:bg-cyan-400">
         Abrir visualização
       </Link>
+import Link from 'next/link';
+
+export default function Home() {
+  return (
+    <main>
+      <h1>Codex Data Nexus</h1>
+      <p>PoC de Grafo Visual para Big Data empresarial.</p>
+      <Link href="/graph">Abrir visualização</Link>
     </main>
   );
 }

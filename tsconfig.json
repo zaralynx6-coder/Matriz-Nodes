@@ -4,12 +4,10 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "strict": true,
-    "esModuleInterop": true,
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@matriz/shared": ["../../packages/shared/src"]
+      "@matriz/shared": ["packages/shared/src"]
     }
-  },
-  "include": ["src/**/*.ts"]
+  }
 }

@@ -4,4 +4,23 @@
 
 body {
   @apply bg-slate-950 text-slate-100;
+html, body {
+  margin: 0;
+  font-family: Inter, Arial, sans-serif;
+  background: #0b1320;
+  color: #e6eef9;
+}
+
+* { box-sizing: border-box; }
+
+input, select, button {
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid #2c3b57;
+  background: #121c2d;
+  color: #fff;
+}
+
+main {
+  padding: 16px;
 }
