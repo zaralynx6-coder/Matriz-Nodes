@@ -1,34 +1,34 @@
-import "dotenv/config";
-import cors from "cors";
-import express from "express";
-import fs from "node:fs";
-import path from "node:path";
-import { z } from "zod";
-import { GraphData, GraphEdge, GraphNode, GraphResponse } from "../../../shared/types";
+import 'dotenv/config';
+import cors from 'cors';
+import express, { Request, Response } from 'express';
+import fs from 'node:fs';
+import path from 'node:path';
+import { z } from 'zod';
+import { GraphData, GraphEdge, GraphNode, GraphResponse } from '@matriz/shared';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const graphPath = path.resolve(process.cwd(), "data/graph.json");
+const graphPath = path.resolve(process.cwd(), 'data/graph.json');
 
 const readGraph = (): GraphData => {
   if (!fs.existsSync(graphPath)) {
-    throw new Error("Arquivo data/graph.json não encontrado. Rode npm run generate primeiro.");
+    throw new Error('Arquivo data/graph.json não encontrado. Rode npm run generate primeiro.');
   }
 
-  const raw = fs.readFileSync(graphPath, "utf-8");
+  const raw = fs.readFileSync(graphPath, 'utf-8');
   return JSON.parse(raw) as GraphData;
 };
 
 const buildSubgraph = (rootId: string, depth = 1): GraphResponse => {
   const graph = readGraph();
-  const nodeMap = new Map(graph.nodes.map((n) => [n.id, n]));
+  const nodeMap = new Map<string, GraphNode>(graph.nodes.map((node) => [node.id, node]));
   const edgeMap = new Map<string, GraphEdge>();
   const selectedNodeIds = new Set<string>([rootId]);
 
   let frontier = new Set<string>([rootId]);
-  for (let d = 0; d < depth; d++) {
+  for (let i = 0; i < depth; i += 1) {
     const next = new Set<string>();
     for (const edge of graph.edges) {
       if (frontier.has(edge.source) || frontier.has(edge.target)) {
@@ -42,42 +42,46 @@ const buildSubgraph = (rootId: string, depth = 1): GraphResponse => {
     frontier = next;
   }
 
-  const nodes: GraphNode[] = Array.from(selectedNodeIds)
+  const nodes: GraphNode[] = [...selectedNodeIds]
     .map((id) => nodeMap.get(id))
-    .filter((n): n is GraphNode => Boolean(n));
+    .filter((node): node is GraphNode => Boolean(node));
 
-  return { nodes, edges: Array.from(edgeMap.values()) };
+  return { nodes, edges: [...edgeMap.values()] };
 };
 
-app.get("/health", (_, res) => {
-  res.json({ status: "ok", service: "matriz-nodes-api" });
+app.get('/health', (_req: Request, res: Response) => {
+  res.json({ status: 'ok', service: 'matriz-nodes-api' });
 });
 
-app.get("/graph/meta", (_, res) => {
+app.get('/graph/meta', (_req: Request, res: Response) => {
   const graph = readGraph();
-  res.json(graph.meta);
-});
-
-app.get("/graph/seed", (req, res) => {
-  const graph = readGraph();
-  const limit = Math.min(Number(req.query.limit ?? 250), 800);
   res.json({
-    nodes: graph.nodes.slice(0, limit),
-    edges: graph.edges.filter(
-      (e) =>
-        graph.nodes.slice(0, limit).some((n) => n.id === e.source) &&
-        graph.nodes.slice(0, limit).some((n) => n.id === e.target)
-    )
+    generatedAt: new Date().toISOString(),
+    nodeCount: graph.nodes.length,
+    edgeCount: graph.edges.length,
   });
 });
 
-app.get("/entity/:id", (req, res) => {
+app.get('/graph/seed', (req: Request, res: Response) => {
+  const graph = readGraph();
+  const limit = Math.min(Number(req.query.limit ?? 250), 800);
+  const selectedNodes = graph.nodes.slice(0, limit);
+  const selectedIds = new Set(selectedNodes.map((node) => node.id));
+
+  res.json({
+    nodes: selectedNodes,
+    edges: graph.edges.filter((edge) => selectedIds.has(edge.source) && selectedIds.has(edge.target)),
+  });
+});
+
+app.get('/entity/:id', (req: Request, res: Response) => {
   const depth = Math.min(Number(req.query.depth ?? 1), 2);
   const subgraph = buildSubgraph(req.params.id, depth);
   if (!subgraph.nodes.length) {
-    return res.status(404).json({ message: "Entidade não encontrada" });
+    return res.status(404).json({ message: 'Entidade não encontrada' });
   }
-  res.json(subgraph);
+
+  return res.json(subgraph);
 });
 
 const txFilterSchema = z.object({
@@ -85,10 +89,10 @@ const txFilterSchema = z.object({
   maxValue: z.coerce.number().optional(),
   startDate: z.coerce.date().optional(),
   endDate: z.coerce.date().optional(),
-  limit: z.coerce.number().min(1).max(500).optional()
+  limit: z.coerce.number().min(1).max(500).optional(),
 });
 
-app.get("/transactions", (req, res) => {
+app.get('/transactions', (req: Request, res: Response) => {
   const parsed = txFilterSchema.safeParse(req.query);
   if (!parsed.success) {
     return res.status(400).json({ message: parsed.error.flatten() });
@@ -97,10 +101,10 @@ app.get("/transactions", (req, res) => {
   const { minValue, maxValue, startDate, endDate, limit = 250 } = parsed.data;
   const graph = readGraph();
 
-  const txNodes = graph.nodes.filter((n) => {
-    if (n.type !== "Transacao") return false;
-    const value = Number(n.properties.valor ?? 0);
-    const date = new Date(String(n.properties.data ?? new Date().toISOString()));
+  const txNodes = graph.nodes.filter((node) => {
+    if (node.type !== 'Transacao') return false;
+    const value = Number(node.properties.valor ?? 0);
+    const date = new Date(String(node.properties.data ?? new Date().toISOString()));
 
     if (minValue !== undefined && value < minValue) return false;
     if (maxValue !== undefined && value > maxValue) return false;
@@ -111,34 +115,35 @@ app.get("/transactions", (req, res) => {
 
   const selectedTxIds = new Set(txNodes.slice(0, limit).map((tx) => tx.id));
   const selectedNodeIds = new Set<string>(selectedTxIds);
-  const selectedEdges = graph.edges.filter((e) => {
-    const hit = selectedTxIds.has(e.source) || selectedTxIds.has(e.target);
+
+  const selectedEdges = graph.edges.filter((edge) => {
+    const hit = selectedTxIds.has(edge.source) || selectedTxIds.has(edge.target);
     if (hit) {
-      selectedNodeIds.add(e.source);
-      selectedNodeIds.add(e.target);
+      selectedNodeIds.add(edge.source);
+      selectedNodeIds.add(edge.target);
     }
     return hit;
   });
 
-  res.json({
-    nodes: graph.nodes.filter((n) => selectedNodeIds.has(n.id)),
-    edges: selectedEdges
+  return res.json({
+    nodes: graph.nodes.filter((node) => selectedNodeIds.has(node.id)),
+    edges: selectedEdges,
   });
 });
 
-app.get("/search", (req, res) => {
-  const q = String(req.query.q ?? "").toLowerCase().trim();
+app.get('/search', (req: Request, res: Response) => {
+  const q = String(req.query.q ?? '').toLowerCase().trim();
   if (!q) {
     return res.json({ nodes: [] });
   }
 
   const graph = readGraph();
   const results = graph.nodes
-    .filter((n) => n.name.toLowerCase().includes(q) || n.id.toLowerCase().includes(q))
+    .filter((node) => node.label.toLowerCase().includes(q) || node.id.toLowerCase().includes(q))
     .slice(0, 20)
-    .map((n) => ({ id: n.id, label: `${n.name} (${n.type})` }));
+    .map((node) => ({ id: node.id, label: `${node.label} (${node.type})` }));
 
-  res.json({ nodes: results });
+  return res.json({ nodes: results });
 });
 
 const port = Number(process.env.API_PORT ?? 4000);
