@@ -47,6 +47,19 @@ const rng = (() => {
 })();
 
 const pick = <T,>(arr: T[]): T => arr[Math.floor(rng() * arr.length)]!;
+const pickMany = <T,>(arr: T[], count: number): T[] => {
+  const pool = [...arr];
+  const selected: T[] = [];
+  const safeCount = Math.max(0, Math.min(count, arr.length));
+
+  for (let i = 0; i < safeCount; i += 1) {
+    const idx = Math.floor(rng() * pool.length);
+    selected.push(pool[idx]!);
+    pool.splice(idx, 1);
+  }
+
+  return selected;
+};
 
 const buildGraph = (): MockGraph => {
   const nodes: MockNode[] = [];
@@ -75,44 +88,111 @@ const buildGraph = (): MockGraph => {
     edges.push({ id: `e_${edgeId++}`, type, source: source.id, target: target.id });
   };
 
-  for (let i = 0; i < COUNTS.Empresa; i += 1) addNode('Empresa', `Empresa ${i + 1}`, { setor: `Setor ${(i % 12) + 1}` });
-  for (let i = 0; i < COUNTS.Produto; i += 1) addNode('Produto', `Produto ${i + 1}`, { categoria: `Categoria ${(i % 16) + 1}` });
-  for (let i = 0; i < COUNTS.Projeto; i += 1) addNode('Projeto', `Projeto ${i + 1}`, { status: i % 3 === 0 ? 'ativo' : 'planejado' });
-  for (let i = 0; i < COUNTS.Documento; i += 1) addNode('Documento', `DOC-${1000 + i}`, { tipo: i % 2 === 0 ? 'contrato' : 'relatorio' });
-  for (let i = 0; i < COUNTS.Conta; i += 1) addNode('Conta', `Conta ${i + 1}`, { banco: `Banco ${(i % 30) + 1}` });
-  for (let i = 0; i < COUNTS.Fatura; i += 1) addNode('Fatura', `Fatura ${i + 1}`, { status: i % 4 === 0 ? 'paga' : 'aberta' });
+  for (let i = 0; i < COUNTS.Empresa; i += 1) {
+    addNode('Empresa', `Empresa ${i + 1}`, {
+      setor: `Setor ${(i % 12) + 1}`,
+      resumo: `Empresa de demonstração ${i + 1}`,
+      redirectUrl: `/entidade/empresa/${i + 1}`,
+    });
+  }
+
+  for (let i = 0; i < COUNTS.Produto; i += 1) {
+    addNode('Produto', `Produto ${i + 1}`, {
+      categoria: `Categoria ${(i % 16) + 1}`,
+      risco: i % 10 === 0 ? 'alto' : 'normal',
+      redirectUrl: `/entidade/produto/${i + 1}`,
+    });
+  }
+
+  for (let i = 0; i < COUNTS.Projeto; i += 1) {
+    addNode('Projeto', `Projeto ${i + 1}`, {
+      status: i % 3 === 0 ? 'ativo' : 'planejado',
+      redirectUrl: `/entidade/projeto/${i + 1}`,
+    });
+  }
+
+  for (let i = 0; i < COUNTS.Documento; i += 1) {
+    addNode('Documento', `DOC-${1000 + i}`, {
+      tipo: i % 2 === 0 ? 'contrato' : 'relatorio',
+      redirectUrl: `/documentos/${1000 + i}`,
+    });
+  }
+
+  for (let i = 0; i < COUNTS.Conta; i += 1) {
+    addNode('Conta', `Conta ${i + 1}`, {
+      banco: `Banco ${(i % 30) + 1}`,
+      redirectUrl: `/entidade/conta/${i + 1}`,
+    });
+  }
+
+  for (let i = 0; i < COUNTS.Fatura; i += 1) {
+    addNode('Fatura', `Fatura ${i + 1}`, {
+      status: i % 4 === 0 ? 'paga' : 'aberta',
+      redirectUrl: `/entidade/fatura/${i + 1}`,
+    });
+  }
 
   for (let i = 0; i < COUNTS.Pessoa; i += 1) {
-    addNode('Pessoa', `Pessoa ${i + 1}`, { cidade: `Cidade ${(i % 50) + 1}`, score: Math.round(rng() * 100) });
+    addNode('Pessoa', `Pessoa ${i + 1}`, {
+      cidade: `Cidade ${(i % 50) + 1}`,
+      score: Math.round(rng() * 100),
+      redirectUrl: `/entidade/pessoa/${i + 1}`,
+    });
   }
 
   for (let i = 0; i < COUNTS.Transacao; i += 1) {
-    addNode('Transacao', `TX-${100000 + i}`, { valor: Math.floor(rng() * 250000) + 100, moeda: 'BRL' });
+    addNode('Transacao', `TX-${100000 + i}`, {
+      valor: Math.floor(rng() * 250000) + 100,
+      moeda: 'BRL',
+      redirectUrl: `/entidade/transacao/${100000 + i}`,
+    });
   }
+
+  const isolatedNodes = new Set(
+    pickMany(byType.Documento, 25)
+      .concat(pickMany(byType.Projeto, 25))
+      .concat(pickMany(byType.Produto, 20))
+      .map((node) => node.id),
+  );
 
   for (const p of byType.Pessoa) {
     addEdge('EMPLOYED_IN', p, pick(byType.Empresa));
+
     const account = pick(byType.Conta);
     addEdge('OWNS_ACCOUNT', p, account);
-    addEdge('WORKS_ON', p, pick(byType.Projeto));
-    if (rng() > 0.55) addEdge('HAS_DOCUMENT', p, pick(byType.Documento));
+
+    const project = pick(byType.Projeto);
+    if (!isolatedNodes.has(project.id)) addEdge('WORKS_ON', p, project);
+
+    const doc = pick(byType.Documento);
+    if (rng() > 0.55 && !isolatedNodes.has(doc.id)) addEdge('HAS_DOCUMENT', p, doc);
 
     const txCount = 1 + Math.floor(rng() * 3);
     for (let i = 0; i < txCount; i += 1) {
       const tx = pick(byType.Transacao);
       addEdge('PAYS', account, tx);
-      addEdge('CONTAINS_ITEM', tx, pick(byType.Produto));
+
+      const product = pick(byType.Produto);
+      if (!isolatedNodes.has(product.id)) addEdge('CONTAINS_ITEM', tx, product);
     }
   }
 
   for (const e of byType.Empresa) {
-    addEdge('SUPPLIES', e, pick(byType.Produto));
-    addEdge('SUPPLIES', e, pick(byType.Produto));
+    const p1 = pick(byType.Produto);
+    const p2 = pick(byType.Produto);
+
+    if (!isolatedNodes.has(p1.id)) addEdge('SUPPLIES', e, p1);
+    if (!isolatedNodes.has(p2.id)) addEdge('SUPPLIES', e, p2);
+
     addEdge('ISSUED_FOR', pick(byType.Fatura), e);
-    if (rng() > 0.5) addEdge('HAS_DOCUMENT', e, pick(byType.Documento));
+
+    const doc = pick(byType.Documento);
+    if (rng() > 0.5 && !isolatedNodes.has(doc.id)) addEdge('HAS_DOCUMENT', e, doc);
   }
 
-  return { nodes, edges };
+  const filteredEdges = edges.filter((edge) => !isolatedNodes.has(edge.source) && !isolatedNodes.has(edge.target));
+
+  return { nodes, edges: filteredEdges };
 };
 
 let cached: MockGraph | null = null;
@@ -124,10 +204,9 @@ export const getMockGraph = (): MockGraph => {
 
 export const getSeedGraph = (limit = 350): MockGraph => {
   const graph = getMockGraph();
-  const nodes = graph.nodes.slice(0, Math.max(1, limit));
-  const ids = new Set(nodes.map((node) => node.id));
-  const edges = graph.edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target));
-  return { nodes, edges };
+  const root = graph.nodes.find((node) => node.type === 'Pessoa')?.id ?? graph.nodes[0]?.id;
+  if (!root) return { nodes: [], edges: [] };
+  return expandEntityGraph(root, 2, Math.max(80, limit));
 };
 
 export const expandEntityGraph = (rootId: string, depth = 1, limit = 500): MockGraph => {
@@ -149,8 +228,10 @@ export const expandEntityGraph = (rootId: string, depth = 1, limit = 500): MockG
         next.add(edge.source);
         next.add(edge.target);
       }
+
       if (selected.size >= limit) break;
     }
+
     frontier = next;
     if (selected.size >= limit) break;
   }
